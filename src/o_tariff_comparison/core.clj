@@ -1,5 +1,8 @@
 (ns o-tariff-comparison.core
-  (:require [clojure.data.json :as json])
+  (:require [clojure.data.json :as json]
+            [clojure.spec.alpha :as s]
+            [o-tariff-comparison.specs :refer :all]
+            [clojure.string :as string])
   (:gen-class))
 
 (def vat 1.05)
@@ -18,19 +21,19 @@
     (catch Exception e nil)))
 
 (defn get-fuel-cost
-  [usage fuel tariff]
-  (let [fuel-rate (get-in tariff [:rates fuel] :not-found)
-        standing-charge (get tariff :standing_charge 0)]
+  [usage fuel-type a-tariff]
+  (let [fuel-rate (get-in a-tariff [:rates fuel-type] :not-found)
+        standing-charge (get a-tariff :standing_charge 0)]
     (if (and (> usage 0) (not (= :not-found fuel-rate) ))
       (+ (* 12 standing-charge) (* usage fuel-rate))
       0.0)))
 
 (defn get-tariff-cost
-  [power-usage gas-usage {tariff-name :tariff :as tariff}]
-  {:tariff tariff-name :cost (* (+
-                                 (get-fuel-cost power-usage :power tariff)
-                                 (get-fuel-cost gas-usage :gas tariff))
-                                vat)})
+  [power-usage gas-usage {:keys [tariff] :as a-tariff}]
+  {:tariff tariff :cost (* (+
+                            (get-fuel-cost power-usage :power a-tariff)
+                            (get-fuel-cost gas-usage :gas a-tariff))
+                           vat)})
 
 (defn get-all-tariffs-costs
   [power-usage gas-usage tariffs]
@@ -85,3 +88,37 @@
           (cond (= command cost-command) (print-cost (string-number arg1) (string-number arg2) tariffs) 
                 (= command usage-command) (print-annual-usage arg1 arg2 (string-number arg3) tariffs)
                 :else (print-not-found command)))))
+
+;; (s/fdef -main
+;;         :args :o-tariff-comparison.specs/f-main)
+
+(s/fdef get-tariff-cost
+        :args :o-tariff-comparison.specs/f-get-tariff-cost
+        :ret :o-tariff-comparison.specs/ret-get-tariff-cost
+        :fn :o-tariff-comparison.specs/fn-get-tariff-cost)
+
+(s/fdef get-fuel-cost
+        :args :o-tariff-comparison.specs/f-get-fuel-cost
+        :ret :o-tariff-comparison.specs/ret-get-fuel-cost
+        :fn :o-tariff-comparison.specs/fn-get-fuel-cost)
+
+(defn group [xs x]
+  (if (= (:month (last xs)) (:month x))
+    (conj (vec (butlast xs)) (update (last xs) :consumption #(+ % (:consumption x))))
+    (conj xs x)))
+
+(defn monthly-usage []
+  (->> "/home/user/labs/clojure/o-tariff-comparison/consumption.csv"
+      slurp
+      string/split-lines
+      rest
+      (map #(string/split % #","))
+      (map (fn [[timestamp consumption]] {:month (subs timestamp 0 7) :consumption (string-number consumption)}))
+      (sort-by #(:month %))
+      (reduce group [])))
+
+;; Error 1: (conj butlast (update last :consumption #(+ % (:consumption last)))) =>
+;;                (conj (butlast xs) (update last :consumption #(+ % (:consumption last))))
+;; Error 2: (conj (butlast xs) (update last :consumption #(+ % (:consumption last)))) =>
+;;                (conj (butlast xs) (update last :consumption #(+ % (:consumption x))))
+;; Error 3: (conj nil x) returns a list: '(x) not a vector!
