@@ -107,14 +107,17 @@
     (conj (vec (butlast xs)) (update (last xs) :consumption #(+ % (:consumption x))))
     (conj xs x)))
 
+(defn make-map [[timestamp consumption]]
+  {:month (subs timestamp 0 7) :consumption (string-number consumption)})
+
 (defn monthly-usage []
   (->> "/home/user/labs/clojure/o-tariff-comparison/consumption.csv"
       slurp
       string/split-lines
       rest
       (map #(string/split % #","))
-      (map (fn [[timestamp consumption]] {:month (subs timestamp 0 7) :consumption (string-number consumption)}))
-      (sort-by #(:month %))
+      (map make-map)
+      (sort-by :month)
       (reduce group [])))
 
 ;; Error 1: (conj butlast (update last :consumption #(+ % (:consumption last)))) =>
