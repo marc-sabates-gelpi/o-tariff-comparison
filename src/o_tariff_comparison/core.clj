@@ -102,26 +102,18 @@
         :ret :o-tariff-comparison.specs/ret-get-fuel-cost
         :fn :o-tariff-comparison.specs/fn-get-fuel-cost)
 
-(defn group [xs x]
-  (if (= (:month (last xs)) (:month x))
-    (conj (vec (butlast xs)) (update (last xs) :consumption #(+ % (:consumption x))))
-    (conj xs x)))
-
-(defn make-map [[timestamp consumption]]
-  {:month (subs timestamp 0 7) :consumption (string-number consumption)})
-
+(defn condition-data [[timestamp consumption]]
+  (list (subs timestamp 0 7) (string-number consumption)))
+(defn aggregate [elem]
+  {:month (ffirst elem) :consumption (transduce (map second) + elem)})
 (defn monthly-usage []
   (->> "/home/user/labs/clojure/o-tariff-comparison/consumption.csv"
       slurp
       string/split-lines
       rest
-      (map #(string/split % #","))
-      (map make-map)
-      (sort-by :month)
-      (reduce group [])))
-
-;; Error 1: (conj butlast (update last :consumption #(+ % (:consumption last)))) =>
-;;                (conj (butlast xs) (update last :consumption #(+ % (:consumption last))))
-;; Error 2: (conj (butlast xs) (update last :consumption #(+ % (:consumption last)))) =>
-;;                (conj (butlast xs) (update last :consumption #(+ % (:consumption x))))
-;; Error 3: (conj nil x) returns a list: '(x) not a vector!
+      (eduction (comp
+                 (map #(string/split % #","))
+                 (map condition-data)
+                 (partition-by first)
+                 (map aggregate)))
+      (sort-by :month)))
