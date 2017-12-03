@@ -102,18 +102,15 @@
         :ret :o-tariff-comparison.specs/ret-get-fuel-cost
         :fn :o-tariff-comparison.specs/fn-get-fuel-cost)
 
-(defn condition-data [[timestamp consumption]]
-  (list (subs timestamp 0 7) (string-number consumption)))
-(defn aggregate [elem]
-  {:month (ffirst elem) :consumption (transduce (map second) + elem)})
 (defn monthly-usage []
-  (->> "/home/user/labs/clojure/o-tariff-comparison/consumption.csv"
+  (->> "consumption.csv"
       slurp
       string/split-lines
       rest
       (eduction (comp
                  (map #(string/split % #","))
-                 (map condition-data)
+                 (map #(update % 0 subs 0 7))
+                 (map #(update % 1 string-number))
                  (partition-by first)
-                 (map aggregate)))
-      (sort-by :month)))
+                 (map #(hash-map ::month (ffirst %) ::consumption (transduce (map second) + %)))))
+      (sort-by ::month)))
